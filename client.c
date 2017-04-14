@@ -3,10 +3,7 @@
 #include <sys/un.h>
 #include <stdio.h>
 
-#define NSTRS       3           /* no. of strings  */
 #define ADDRESS     "mysocket"  /* addr to connect */
-
-
 
 int main(int argc, char *argv[])
 {
@@ -16,6 +13,7 @@ int main(int argc, char *argv[])
     struct sockaddr_un address;
 
     while ((opt = getopt(argc, argv, "p")) != -1)
+    {
         switch (opt)
         {
         case 'p':
@@ -25,7 +23,7 @@ int main(int argc, char *argv[])
             printf("Error: '%c': nesparvny prepinac", argv[0]);
             exit(1);
         }
-
+    }
 
     // initialize socket
     if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
@@ -53,11 +51,11 @@ int main(int argc, char *argv[])
 
 
     // read & print string from the server
-        while ((c = fgetc(fp)) != EOF) {
-            putchar(c);
-            if (c == '\n')
-                break;
-        }
+    /*while ((c = fgetc(fp)) != EOF) {
+        putchar(c);
+        if (c == '\n')
+           break;
+    }*/
 
     // send a string to the server
     send(sock, argv[2], strlen(argv[2]), 0);
