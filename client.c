@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #define ADDRESS     "mysocket"  /* addr to connect */
+#define STDIN       0
 
 int main(int argc, char *argv[])
 {
@@ -14,6 +15,7 @@ int main(int argc, char *argv[])
     char msg[1024], servaddr_reply[1024], buffer[1024];
     fd_set rs;
     ssize_t r, w;
+    int valread, activity;
 
 
 
@@ -58,18 +60,48 @@ int main(int argc, char *argv[])
 
     while(1)
     {
-        if (FD_ISSET(sock, &rs) < 0) break;
-        printf("Enter msg:");
-        scanf("%s" , msg);
+        FD_ZERO(&rs);
+        //add master socket to set
+        FD_SET(STDIN, &rs);
+        FD_SET(sock, &rs);
 
-        if(strcmp(msg, "exit") == 0){
-            break;
-        }
+        activity = select(sock + 1, &rs, NULL, NULL, NULL);
 
-        if( send(sock , msg , strlen(msg) , 0) < 0)
+        if (FD_ISSET(sock, &rs)) 
         {
-            puts("Send failed");
-            return 1;
+            if(recv(sock, buffer, 1024, 0) < 0)
+            {
+                puts("recv failed");
+            }
+            if(strcmp(buffer, "shutdown") == 0)
+            {
+                fprintf(stderr, "%s\n", buffer);
+                break;
+            }
+            else
+            {
+                fprintf(stderr, "Reply received: %s\n", buffer);
+                memset(buffer,'\0', sizeof(buffer));
+                memset(buffer, 0, 1024);
+            }
+        }
+        else if (FD_ISSET(STDIN, &rs)) 
+        {
+            valread = read(0, buffer, 1024);
+            buffer[valread - 1] = 0;
+            printf("Enter msg:");
+            scanf("%s" , msg);
+
+            if(strcmp(msg, "exit") == 0)
+            {
+                break;
+            }
+
+            if(send(sock, msg, strlen(msg), 0) < 0)
+            {
+                puts("Send failed");
+                return 1;
+            }
         }
          // server reply
         /*if( recv(sock, servaddr_reply , 2000 , 0) < 0)
@@ -86,14 +118,14 @@ int main(int argc, char *argv[])
             }
             printf(buffer);*/
         //}
-        puts("Echo: ");
+        //uts("Echo: ");
         //if (n < 0) error("ERROR reading from socket");
             //Receive a reply from the server
-        if( recv(sock, buffer, 1024, 0) < 0)
+        /*if( recv(sock, buffer, 1024, 0) < 0)
         {
             puts("recv failed");
-        }
-        fprintf(stderr, "Reply received\n%s\n", buffer);
+        }*/
+        
         /*
         puts("Reply received\n");
         puts(buffer);*/

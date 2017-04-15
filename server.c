@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
                 exit(1);
             }
             //inform user of socket number - used in send and receive commands
-            printf("New connection , socket fd is %d\n" , new_socket);
+            printf("New connection, socket fd is %d\n" , new_socket);
         
             //send new connection greeting message
             if(send(new_socket, message, strlen(message), 0) != strlen(message) ) 
@@ -171,12 +171,21 @@ int main(int argc, char *argv[])
         }
 		else if (FD_ISSET(STDIN, &readfds)) 
         {
-        	fprintf(stderr, "penis\n");
         	valread = read(0, buffer, 1024);
         	buffer[valread - 1] = 0;
 
         	if(strcmp(buffer, "quit") == 0){
         		fprintf(stderr, "quit iniciated\n");
+        		// let all connected clients know that the server is shutting down
+        		for (i = 0; i < max_clients; i++) {
+					sd = client_socket[i];
+					if(sd > 0){
+						strcpy(buffer, "shutdown");
+						send(sd, buffer, strlen(buffer), 0);
+						close(sd);
+					}
+				}
+				fprintf(stderr, "Server was shut down\n");
         		break;
         	}
         }
@@ -193,7 +202,7 @@ int main(int argc, char *argv[])
 	                {
 	                    //Somebody disconnected , get his details and print
 	                    getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
-	                    printf("Host disconnected\n");
+	                    printf("Client with socket fd %d disconnected\n", sd);
 	                      
 	                    //Close the socket and mark as 0 in list for reuse
 	                    close( sd );
@@ -203,9 +212,13 @@ int main(int argc, char *argv[])
 	                //Echo back the message that came in
 	                else
 	                {
+
+	                	fprintf(stderr, "Got message:'%s' from a client with socket fd: %d\n", buffer, sd);
 	                    //set the string terminating NULL byte on the end of the data read
 	                    buffer[valread] = '\0';
-	                    send(sd , buffer , strlen(buffer) , 0 );
+	                    send(sd, buffer, strlen(buffer), 0);
+						memset(buffer,'\0', sizeof(buffer));
+			        	memset(buffer, 0, 1024);
 	                }
 	            }
 	        }
