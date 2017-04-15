@@ -5,17 +5,25 @@
 #include <time.h>
 #include <errno.h>
 
-#define ADDRESS     "mysocket"  /* addr to connect */
-#define WELCOME		"Welcome to the server!\n"
-#define MAXMSG  	1024
-#define STDIN 		0
+#define ADDRESS     	"mysocket"  /* addr to connect */
+#define WELCOME			"Welcome to the server!\n"
+#define MAX_LENGTH  	1024
+#define STDIN 			0
+#define SEND_FILE		"Sending file"
+
+// TO DO dat do kniznice lebo to pouziva aj client.c
+void reset_string_memory(char* buffer)
+{
+	memset(buffer,'\0', sizeof(buffer));
+	memset(buffer, 0, MAX_LENGTH);
+}
 
 char* read_from_client (int filedes)
 {
-  char* buffer = (char*)malloc(MAXMSG * sizeof(char));
+  char* buffer = (char*)malloc(MAX_LENGTH * sizeof(char));
   int nbytes;
 
-  nbytes = read (filedes, buffer, MAXMSG);
+  nbytes = read (filedes, buffer, MAX_LENGTH);
   if (nbytes < 0)
     {
       /* Read error. */
@@ -35,7 +43,7 @@ char* read_from_client (int filedes)
 
 void send_help_to_client()
 {
-	char* buffer = (char*)malloc(MAXMSG * sizeof(char));
+	char* buffer = (char*)malloc(MAX_LENGTH * sizeof(char));
 
 	strcpy(buffer, "Help");
 
@@ -50,10 +58,10 @@ int main(int argc, char *argv[])
 	struct sockaddr_un address, fsaun, clientname;
 	time_t t;
 	struct tm *tm_info;
-	char buffer[MAXMSG];
+	char buffer[MAX_LENGTH];
 	fd_set active_fd_set, read_fd_set, readfds;
 	size_t size;
-	char* test_buffer = (char*)malloc(MAXMSG * sizeof(char));
+	char* test_buffer = (char*)malloc(MAX_LENGTH * sizeof(char));
 	pid_t pid;
 	int new, max_sd, number_of_clients = 0;
 	int opt = 1;
@@ -150,8 +158,7 @@ int main(int argc, char *argv[])
             if (number_of_clients > max_clients){
 				strcpy(buffer, "Server is full, sorry :(");
 				send(new_socket, buffer, strlen(buffer), 0);
-				memset(buffer,'\0', sizeof(buffer));
-			    memset(buffer, 0, 1024);
+				reset_string_memory(buffer);
             }
             else{
 	            //inform user of socket number - used in send and receive commands
@@ -181,7 +188,7 @@ int main(int argc, char *argv[])
         }
 		else if (FD_ISSET(STDIN, &readfds)) 
         {
-        	valread = read(0, buffer, 1024);
+        	valread = read(0, buffer, MAX_LENGTH);
         	buffer[valread - 1] = 0;
 
         	if(strcmp(buffer, "quit") == 0){
@@ -195,7 +202,7 @@ int main(int argc, char *argv[])
 						close(sd);
 					}
 				}
-				fprintf(stderr, "Server was shut down\n");
+				fprintf(stderr, "Server has been shut down\n");
         		break;
         	}
         }
@@ -208,7 +215,7 @@ int main(int argc, char *argv[])
 	            if (FD_ISSET(sd, &readfds)) 
 	            {
 	                //Check if it was for closing , and also read the incoming message
-	                if ((valread = read( sd , buffer, 1024)) == 0)
+	                if ((valread = read(sd, buffer, MAX_LENGTH)) == 0)
 	                {
 	                    //Somebody disconnected , get his details and print
 	                    getpeername(sd , (struct sockaddr*)&address , (socklen_t*)&addrlen);
@@ -219,17 +226,55 @@ int main(int argc, char *argv[])
 	                    client_socket[i] = 0;
 	                    number_of_clients--;
 	                }
-	                  
+	                else if (strcmp(buffer, SEND_FILE) == 0)
+	                {
+	                	fprintf(stderr, "Server is receiving file from client with a socket fd %d\n", sd);
+						reset_string_memory(buffer);
+	                	valread = read(sd, buffer, MAX_LENGTH);
+	                	fprintf(stderr, "Name of the file: %s\n", buffer);
+	                	// run vypocita počet riadkov, slov a znakov
+	                	FILE *file_for_reading;
+	                	file_for_reading = fopen(buffer, "r");
+	                	char char_read_from_file, previous_char = NULL;
+	                	int number_of_lines = 0, number_of_words = 0, number_of_letters = 0, number_of_characters = 0;
+	                	while ((char_read_from_file = fgetc(file_for_reading)) != EOF)
+	                	{             		
+	                		if (char_read_from_file == '\n')
+	                		{
+	                			number_of_lines++;
+	                		}
+	                		if((char_read_from_file >= 65 && char_read_from_file <= 90) ||
+	                			(char_read_from_file >= 97 && char_read_from_file <= 122))
+	                		{
+	                			number_of_letters++;
+	                		}
+	                		if (((previous_char >= 65 && previous_char <= 90) ||
+	                			(previous_char >= 97 && previous_char <= 122)) &&
+	                			!((char_read_from_file >= 65 && char_read_from_file <= 90) ||
+	                			(char_read_from_file >= 97 && char_read_from_file <= 122)))
+	                		{
+	                			number_of_words++;
+	                		}
+	                		previous_char = char_read_from_file;
+	                		number_of_characters++;
+	                		//printf("%c", char_read_from_file);
+	                	}
+	                	/*printf("number of lines = %d\nnumber of word = %d\nnumber of letters = %d\nnumber of characters = %d\n",
+	                			number_of_lines, number_of_words, number_of_letters, number_of_characters);*/
+						send(sd, &number_of_lines, sizeof(number_of_lines), 0);
+						send(sd, &number_of_words, sizeof(number_of_words), 0);
+						send(sd, &number_of_letters, sizeof(number_of_letters), 0);
+						send(sd, &number_of_characters, sizeof(number_of_characters), 0);
+	                	fclose(file_for_reading);
+	                }
 	                //Echo back the message that came in
 	                else
 	                {
-
 	                	fprintf(stderr, "Got message:'%s' from a client with socket fd: %d\n", buffer, sd);
 	                    //set the string terminating NULL byte on the end of the data read
 	                    buffer[valread] = '\0';
 	                    send(sd, buffer, strlen(buffer), 0);
-						memset(buffer,'\0', sizeof(buffer));
-			        	memset(buffer, 0, 1024);
+						reset_string_memory(buffer);
 	                }
 	            }
 	        }

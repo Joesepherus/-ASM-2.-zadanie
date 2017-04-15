@@ -3,8 +3,16 @@
 #include <sys/un.h>
 #include <stdio.h>
 
-#define ADDRESS     "mysocket"  /* addr to connect */
-#define STDIN       0
+#define ADDRESS         "mysocket"  /* addr to connect */
+#define STDIN           0
+#define MAX_LENGTH      1024
+#define SEND_FILE       "Sending file"
+
+void reset_string_memory(char* buffer)
+{
+    memset(buffer,'\0', sizeof(buffer));
+    memset(buffer, 0, MAX_LENGTH);
+}
 
 int main(int argc, char *argv[])
 {
@@ -12,7 +20,7 @@ int main(int argc, char *argv[])
     FILE *fp;
     register int i, sock, len, opt;
     struct sockaddr_un address;
-    char msg[1024], servaddr_reply[1024], buffer[1024];
+    char msg[MAX_LENGTH], servaddr_reply[MAX_LENGTH], buffer[MAX_LENGTH], file_name[MAX_LENGTH];
     fd_set rs;
     ssize_t r, w;
     int valread, activity;
@@ -69,7 +77,7 @@ int main(int argc, char *argv[])
 
         if (FD_ISSET(sock, &rs)) 
         {
-            if (recv(sock, buffer, 1024, 0) < 0)
+            if (recv(sock, buffer, MAX_LENGTH, 0) < 0)
             {
                 puts("recv failed");
             }
@@ -81,26 +89,47 @@ int main(int argc, char *argv[])
             else
             {
                 fprintf(stderr, "Reply received: %s\n", buffer);
-                memset(buffer,'\0', sizeof(buffer));
-                memset(buffer, 0, 1024);
+                reset_string_memory(buffer);
             }
         }
         else if (FD_ISSET(STDIN, &rs)) 
         {
-            valread = read(0, buffer, 1024);
+            valread = read(0, buffer, MAX_LENGTH);
             buffer[valread - 1] = 0;
-            printf("Enter msg:");
+            printf("Enter msg: ");
             scanf("%s" , msg);
 
-            if(strcmp(msg, "exit") == 0)
+            if (strcmp(msg, "exit") == 0)
             {
                 break;
             }
 
-            if(send(sock, msg, strlen(msg), 0) < 0)
+            // run function - sending a file to the server
+            if (strcmp(msg, "run") == 0)
             {
-                puts("Send failed");
-                return 1;
+                strcpy(buffer, SEND_FILE);
+                send(sock, buffer, strlen(buffer), 0);
+                reset_string_memory(buffer);
+                printf("Enter name of the file: ");
+                scanf("%s", file_name);
+                send(sock, file_name, strlen(file_name), 0);
+                int amount;
+                recv(sock, &amount, sizeof(amount), 0);
+                fprintf(stderr, "Number of lines: %d\n", amount);
+                recv(sock, &amount, sizeof(amount), 0);
+                fprintf(stderr, "Numer of words: %d\n", amount);
+                recv(sock, &amount, sizeof(amount), 0);
+                fprintf(stderr, "Number of letters: %d\n", amount);
+                recv(sock, &amount, sizeof(amount), 0);
+                fprintf(stderr, "Number of characters: %d\n", amount);
+            }
+            else
+            {
+                if (send(sock, msg, strlen(msg), 0) < 0)
+                {
+                    puts("Send failed");
+                    return 1;
+                }
             }
         }
          // server reply
