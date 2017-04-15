@@ -69,11 +69,11 @@ int main(int argc, char *argv[])
 
         if (FD_ISSET(sock, &rs)) 
         {
-            if(recv(sock, buffer, 1024, 0) < 0)
+            if (recv(sock, buffer, 1024, 0) < 0)
             {
                 puts("recv failed");
             }
-            if(strcmp(buffer, "shutdown") == 0)
+            if (strcmp(buffer, "shutdown") == 0 || strcmp(buffer, "Server is full, sorry :(") == 0)
             {
                 fprintf(stderr, "%s\n", buffer);
                 break;

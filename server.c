@@ -55,9 +55,9 @@ int main(int argc, char *argv[])
 	size_t size;
 	char* test_buffer = (char*)malloc(MAXMSG * sizeof(char));
 	pid_t pid;
-	int new, max_sd;
+	int new, max_sd, number_of_clients = 0;
 	int opt = 1;
-    int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 30 , activity, valread , sd;
+    int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 5 , activity, valread , sd;
     char *message = "Welcome to the server, friend :)\n";
 
     //initialise all client_socket[] to 0 so not checked
@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
              
             //if valid socket descriptor then add to read list
             if(sd > 0)
-                FD_SET( sd , &readfds);
+                FD_SET(sd, &readfds);
              
             //highest file descriptor number, need it for the select function
             if(sd > max_sd)
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
         }
 
         //wait for an activity on one of the sockets , timeout is NULL , so wait indefinitely
-        activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
+        activity = select(max_sd + 1 , &readfds , NULL , NULL , NULL);
 		if ((activity < 0) && (errno!=EINTR)) 
         {
             printf("select error");
@@ -140,34 +140,44 @@ int main(int argc, char *argv[])
         //If something happened on the master socket , then its an incoming connection
         if (FD_ISSET(master_socket, &readfds)) 
         {
+        	number_of_clients++;
             if ((new_socket = accept(master_socket, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0)
             {
                 perror("accept");
                 exit(1);
             }
-            //inform user of socket number - used in send and receive commands
-            printf("New connection, socket fd is %d\n" , new_socket);
-        
-            //send new connection greeting message
-            if(send(new_socket, message, strlen(message), 0) != strlen(message) ) 
-            {
-                perror("send");
+
+            if (number_of_clients > max_clients){
+				strcpy(buffer, "Server is full, sorry :(");
+				send(new_socket, buffer, strlen(buffer), 0);
+				memset(buffer,'\0', sizeof(buffer));
+			    memset(buffer, 0, 1024);
             }
-              
-            puts("Welcome message sent successfully");
-              
-            //add new socket to array of sockets
-            for (i = 0; i < max_clients; i++) 
-            {
-                //if position is empty
-                if( client_socket[i] == 0 )
-                {
-                    client_socket[i] = new_socket;
-                    printf("Adding to list of sockets as %d\n" , i);
-                     
-                    break;
-                }
-            }
+            else{
+	            //inform user of socket number - used in send and receive commands
+	            printf("New connection, socket fd is %d\n" , new_socket);
+	        
+	            //send new connection greeting message
+	            if(send(new_socket, message, strlen(message), 0) != strlen(message) ) 
+	            {
+	                perror("send");
+	            }
+	              
+	            puts("Welcome message sent successfully");
+	              
+	            //add new socket to array of sockets
+	            for (i = 0; i < max_clients; i++) 
+	            {
+	                //if position is empty
+	                if( client_socket[i] == 0 )
+	                {
+	                    client_socket[i] = new_socket;
+	                    printf("Adding to list of sockets as %d\n" , i);
+	                     
+	                    break;
+	                }
+	            }
+        	}
         }
 		else if (FD_ISSET(STDIN, &readfds)) 
         {
@@ -205,8 +215,9 @@ int main(int argc, char *argv[])
 	                    printf("Client with socket fd %d disconnected\n", sd);
 	                      
 	                    //Close the socket and mark as 0 in list for reuse
-	                    close( sd );
+	                    close(sd);
 	                    client_socket[i] = 0;
+	                    number_of_clients--;
 	                }
 	                  
 	                //Echo back the message that came in
