@@ -5,13 +5,17 @@
 #include <time.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/resource.h>
 
 #define ADDRESS     	"mysocket"  /* addr to connect */
+#define ADRESS 			"mysocke"
 #define WELCOME			"Welcome to the server!\n"
 #define MAX_LENGTH  	1024
 #define STDIN 			0
 #define SEND_FILE		"Sending file"
 #define DATE_AND_TIME	"Current date and time: "
+#define SEND_INFO		"Send me info"
+#define MAX_CLIENTS 	5
 
 // TO DO dat do kniznice lebo to pouziva aj client.c
 void reset_string_memory(char* buffer)
@@ -88,6 +92,90 @@ char* current_date_and_time()
 	return buffer;
 }
 
+server_quit(int client_socket[])
+{
+	int i, sd;
+	char buffer[MAX_LENGTH];
+ 	fprintf(stderr, "quit iniciated\n");
+    // let all connected clients know that the server is shutting down
+    for (i = 0; i < MAX_CLIENTS; i++) {
+		sd = client_socket[i];
+		if(sd > 0){
+			strcpy(buffer, "Server is shutting down");
+			send(sd, buffer, strlen(buffer), 0);
+			close(sd);
+		}
+	}
+	fprintf(stderr, "Server has been shut down\n");
+}		
+
+void info(int sd){
+	struct timeval time_val, start, end, total;
+	time_t seconds;
+	char date[65];
+	char time[65];
+	struct rusage usage, use;
+	int i, j, a = 0, who = 0;
+	long mem;
+
+
+	printf("Informations incialized:\n");
+
+	asm(
+		"movl $116, %%eax;"
+		"push $0;"	
+		"push %0;"
+		"push $0;"
+		"int $0x80;"
+		:
+		: "b" (&time_val)
+		);
+
+	for(i = 0; i < 10000; i++)
+	{
+		for(j = 0; j < 1000; j++)
+		{
+			a ++;
+			a *= 87;
+			a -= 2;
+		}
+	}
+
+	asm(
+		"movl $117, %%eax;"
+		"push %0;"
+		"push $0;"
+		"push $0;"
+		"int $0x80;"
+		:
+		: "b" (&use)
+		);
+
+	mem = use.ru_maxrss;
+	total = use.ru_utime;
+	seconds = time_val.tv_sec;
+
+	strftime(date, 65, "%d.%m.%Y", localtime(&seconds));
+	strftime(time, 65, "%T", localtime(&seconds));
+	if(sd == NULL)
+	{
+		printf("Current date: %s\nCurrent time: %s\n", date, time);
+		printf("Total CPU usage: %ld.%06lds\n", total.tv_sec, total.tv_usec);
+		printf("Memory used: %ldKB\n", mem);
+	}
+	else
+	{
+		if (send(sd, date, strlen(date), 0) < 0)
+		{
+            puts("Send failed");
+    	}
+		send(sd, time, strlen(time), 0);
+		send(sd, &total.tv_sec, sizeof(total.tv_sec), 0);
+		send(sd, &total.tv_usec, sizeof(total.tv_usec), 0);
+		send(sd, &mem, sizeof(mem), 0);
+	}
+}	
+
 
 int server()
 {
@@ -136,7 +224,7 @@ int server()
 	* the structure, not just the length of the
 	* socket name.
 	*/
-	unlink(ADDRESS);
+	unlink(ADRESS);
 	len = sizeof(address.sun_family) + strlen(address.sun_path);
 
 	if (bind(master_socket, (struct sockaddr *)&address, len) < 0) 
@@ -220,7 +308,6 @@ int server()
 	                {
 	                    client_socket[i] = new_socket;
 	                    printf("Adding to list of sockets as %d\n" , i);
-	                     
 	                    break;
 	                }
 	            }
@@ -231,8 +318,10 @@ int server()
         	valread = read(0, buffer, MAX_LENGTH);
         	buffer[valread - 1] = 0;
 
-        	if(strcmp(buffer, "quit") == 0){
-        		fprintf(stderr, "quit iniciated\n");
+        	if(strcmp(buffer, "quit") == 0)
+        	{
+        		server_quit(client_socket);
+        		/*fprintf(stderr, "quit iniciated\n");
         		// let all connected clients know that the server is shutting down
         		for (i = 0; i < max_clients; i++) {
 					sd = client_socket[i];
@@ -242,8 +331,13 @@ int server()
 						close(sd);
 					}
 				}
-				fprintf(stderr, "Server has been shut down\n");
-        		break;
+				fprintf(stderr, "Server has been shut down\n");*/
+				close(master_socket);
+        		return 0;
+        	}
+        	if(strcmp(buffer, "info") == 0)
+        	{
+        		info(NULL);
         	}
         }
         //else its some IO operation on some other socket :)
@@ -307,16 +401,25 @@ int server()
 						send(sd, &number_of_characters, sizeof(number_of_characters), 0);
 	                	fclose(file_for_reading);
 	                }
-	                else if (strcmp(buffer, "info") == 0)
+	                else if (strcmp(buffer, SEND_INFO) == 0)
 	                {
-	                	strcpy(buffer, DATE_AND_TIME);
+	                	fprintf(stderr, "Server is processing info from socket %d\n", sd);
+						reset_string_memory(buffer);
+	                	info(sd);
+	                	//strcpy(buffer, DATE_AND_TIME);
 	                	//current_date_and_time();
-    				 	strcat(buffer, current_date_and_time());
-    				 	send(sd, buffer, strlen(buffer), 0);
-    				 	reset_string_memory(buffer);
+    				 	//strcat(buffer, current_date_and_time());
+    				 	//send(sd, buffer, strlen(buffer), 0);
+    				 	//reset_string_memory(buffer);
 
     				 	// TO DO consumed processor time
     				 	// TO DO used memory
+	                }
+	                else if (strcmp(buffer, "halt") == 0)
+	                {
+	                	server_quit(client_socket);
+	                	close(master_socket);
+	                	return 0;
 	                }
 	                //Echo back the message that came in
 	                else
@@ -387,7 +490,7 @@ int client()
             {
                 puts("recv failed");
             }
-            if (strcmp(buffer, "shutdown") == 0 || strcmp(buffer, "Server is full, sorry :(") == 0)
+            if (strcmp(buffer, "Server is shutting down") == 0 || strcmp(buffer, "Server is full, sorry :(") == 0)
             {
                 fprintf(stderr, "%s\n", buffer);
                 break;
@@ -400,18 +503,19 @@ int client()
         }
         else if (FD_ISSET(STDIN, &rs)) 
         {
-            valread = read(0, buffer, MAX_LENGTH);
-            buffer[valread - 1] = 0;
-            printf("Enter msg: ");
-            scanf("%s" , msg);
+            /*valread = read(0, buffer, MAX_LENGTH);
+            buffer[valread - 1] = 0;*/
+            //printf("Enter msg: ");
+            scanf("%s", buffer);
 
-            if (strcmp(msg, "exit") == 0)
+            if (strcmp(buffer, "quit") == 0)
             {
+            	fprintf(stderr, "Closing client now\n");
                 break;
             }
 
             // run function - sending a file to the server
-            if (strcmp(msg, "run") == 0)
+            if (strcmp(buffer, "run") == 0)
             {
                 strcpy(buffer, SEND_FILE);
                 send(sock, buffer, strlen(buffer), 0);
@@ -429,9 +533,33 @@ int client()
                 recv(sock, &amount, sizeof(amount), 0);
                 fprintf(stderr, "Number of characters: %d\n", amount);
             }
+
+            if(strcmp(buffer, "info") == 0)
+            {
+            	strcpy(buffer, SEND_INFO);
+            	send(sock, buffer, strlen(buffer), 0);
+            	reset_string_memory(buffer);
+
+            	char date[65];
+            	char time[65];
+            	long sec, usec, mem;
+
+            	recv(sock, &date, sizeof(date), 0);
+            	printf("Current date: %s\n", date);
+            	recv(sock, &time, sizeof(time), 0);
+            	printf("Current time: %s\n", time);
+            	recv(sock, &sec, sizeof(sec), 0);
+            	printf("Total CPU usage: %ld", sec);
+            	recv(sock, &usec, sizeof(usec), 0);
+            	printf(".%lds\n", usec);
+            	recv(sock, &mem, sizeof(mem), 0);
+            	printf("Memory used: %ldKB\n", mem);
+            	/*recv(sock, total.tv_usec, sizeof(total.tv_usec), 0);
+            	recv(sock, mem, sizeof(mem), 0);*/
+            }
             else
             {
-                if (send(sock, msg, strlen(msg), 0) < 0)
+                if (send(sock, buffer, strlen(buffer), 0) < 0)
                 {
                     puts("Send failed");
                     return 1;
@@ -443,7 +571,7 @@ int client()
     // close socket
     close(sock);
 
-   	exit(0);
+   	return 0;
 }   
 
 
@@ -465,6 +593,21 @@ int main(int argc, char *argv[])
     int master_socket , addrlen , new_socket , client_socket[30] , max_clients = 5 , activity, valread , sd;
     char *message = "Welcome to the server, friend :)\n";
     int c = 0;
+	char *log_name = (char *) malloc(256 * sizeof(char));
+    strcpy(log_name, "client_log.txt");
+
+    // Nacita konfiguracny subor z premennej prostredia
+    if (getenv("PROJECT_CONFIG") != NULL) {
+        FILE *config_file = fopen(getenv("PROJECT_CONFIG"), "r");
+        if (config_file) {
+            fgets(log_name, 255, config_file);
+            log_name[strlen(log_name) - 1] = '\0';
+            printf("%s\n", log_name);
+        } else {
+            perror("Chyba otvarania konfiguracneho suboru!");
+        }
+        fclose(config_file);
+    }
 
     while ((opt = getopt(argc, argv, "sc")) != -1)
     {
